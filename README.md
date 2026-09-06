@@ -12,4 +12,10 @@ How To Play:
 
 (TODO: describe the controls and (if needed) goals/strategy.)
 
+## Extra Credit
+
+Are your Physics Deterministic? If so, how can we verify this?
+
+Are your Physics Rewindable? If so, how can we verify this?
+
 This game was built with [NEST](NEST.md).
