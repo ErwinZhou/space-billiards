@@ -22,7 +22,7 @@ constexpr std::array<char const *, 4> asset_names = {
 }
 
 PlayMode::PlayMode() {
-	// Read everything before allocating GL resources, so a missing PNG fails cleanly.
+	// read pngs before allocating gl resources
 	std::array<std::vector<glm::u8vec4>, 4> pixels;
 	for (size_t i = 0; i < asset_names.size(); ++i) {
 		glm::uvec2 size;
@@ -65,12 +65,46 @@ PlayMode::~PlayMode() {
 	glDeleteVertexArrays(1, &sprite_vao);
 }
 
-bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &) {
-	if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_R && !event.key.repeat) {
-		game.reset();
+bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_size) {
+	if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+		if (event.key.key == SDLK_R) {
+			selected = -1;
+			game.reset();
+			return true;
+		}
+		if (event.key.key == SDLK_ESCAPE) {
+			selected = -1;
+			return true;
+		}
+	}
+	if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST || event.type == SDL_EVENT_WINDOW_RESIZED) {
+		selected = -1;
+		return false;
+	}
+	bool down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT;
+	bool up = event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT;
+	bool motion = event.type == SDL_EVENT_MOUSE_MOTION;
+	if (!down && !up && !motion) return false;
+	if (!down && selected < 0) return false;
+	glm::vec2 mouse = motion ? glm::vec2(event.motion.x, event.motion.y) : glm::vec2(event.button.x, event.button.y);
+	glm::vec2 world;
+	if (!ArenaLayout::fit(window_size).mouse_to_world(mouse, window_size, &world) ||
+		world.x < game.arena_min.x || world.x > game.arena_max.x ||
+		world.y < game.arena_min.y || world.y > game.arena_max.y) {
+		selected = -1;
 		return true;
 	}
-	return false;
+	if (down) {
+		selected = game.ready_to_shoot() ? game.asteroid_at(world) : -1;
+		drag_start = drag_cursor = world;
+	} else if (up) {
+		int index = selected;
+		selected = -1;
+		game.shoot(index, world - drag_start);
+	} else {
+		drag_cursor = world;
+	}
+	return true;
 }
 
 void PlayMode::update(float) {
@@ -92,7 +126,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glUseProgram(shader.program);
 	glUniformMatrix4fv(shader.OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(projection));
 	glBindVertexArray(sprite_vao);
-	// The shader multiplies by vertex color; use solid white for every sprite.
+	// white vertex color preserves sprite colors
 	glVertexAttrib4f(shader.Color_vec4, 1.0f, 1.0f, 1.0f, 1.0f);
 	glActiveTexture(GL_TEXTURE0);
 	auto draw_sprite = [&](GLuint texture, glm::vec2 center) {
@@ -124,10 +158,30 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glm::vec3 br(hi.x, lo.y, 0.0f), tl(lo.x, hi.y, 0.0f);
 		lines.draw(lo, br, border); lines.draw(br, hi, border);
 		lines.draw(hi, tl, border); lines.draw(tl, lo, border);
+		if (selected >= 0) {
+			auto const &asteroid = game.asteroids[selected];
+			glm::u8vec4 gold(255, 195, 94, 255);
+			for (int i = 0; i < 32; ++i) {
+				float a = float(i) * 6.2831853f / 32.0f;
+				float b = float(i + 1) * 6.2831853f / 32.0f;
+				float radius = asteroid.radius + 4.0f;
+				lines.draw(glm::vec3(asteroid.position + radius * glm::vec2(std::cos(a), std::sin(a)), 0),
+					glm::vec3(asteroid.position + radius * glm::vec2(std::cos(b), std::sin(b)), 0), gold);
+			}
+			glm::vec2 aim = BilliardsLogic::shot_velocity(drag_cursor - drag_start) / BilliardsLogic::shot_speed_per_unit;
+			if (aim != glm::vec2(0.0f)) {
+				glm::vec2 tip = asteroid.position + aim;
+				glm::vec2 direction = glm::normalize(aim);
+				glm::vec2 normal(-direction.y, direction.x);
+				lines.draw(glm::vec3(asteroid.position, 0), glm::vec3(tip, 0), gold);
+				lines.draw(glm::vec3(tip, 0), glm::vec3(tip - direction * 8.0f + normal * 4.0f, 0), gold);
+				lines.draw(glm::vec3(tip, 0), glm::vec3(tip - direction * 8.0f - normal * 4.0f, 0), gold);
+			}
+		}
 		float h = 12.0f;
-		lines.draw_text("Space Billiards", glm::vec3(32, 612, 0),
+		lines.draw_text("Space Billiards | Shots: " + std::to_string(game.shots), glm::vec3(32, 612, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
-		lines.draw_text("R: reset", glm::vec3(32, 20, 0),
+		lines.draw_text("Drag back and release to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}
 	GL_ERRORS();

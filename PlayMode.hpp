@@ -6,7 +6,7 @@
 
 #include <array>
 
-// local Space Billiards arena
+// local space billiards arena
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
@@ -15,6 +15,9 @@ struct PlayMode : Mode {
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
 	BilliardsLogic game;
+	int selected = -1;
+	glm::vec2 drag_start{0.0f};
+	glm::vec2 drag_cursor{0.0f};
 	std::array<GLuint, 4> textures{};
 	GLuint sprite_vao = 0;
 	GLuint sprite_vbo = 0;
