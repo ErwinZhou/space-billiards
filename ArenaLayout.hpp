@@ -3,8 +3,8 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
-// mapping for the 1024x640 world, including border and HUD margins
-// ccreen coordinates here use the lower-left origin: SDL mouse input uses the top-left
+// mapping for the 1024x640 world including border and hud margins
+// screen coordinates use the lower-left origin and mouse input uses the top-left
 struct ArenaLayout {
 	float scale = 0.0f;
 	glm::vec2 offset{0.0f};
@@ -24,7 +24,7 @@ struct ArenaLayout {
 		result[3][1] = 2.0f * offset.y / size.y - 1.0f;
 		return result;
 	}
-	// logical window dimensions for SDL input, drawable dimensions for rendering
+	// logical window dimensions for mouse input and drawable dimensions for rendering
 	bool mouse_to_world(glm::vec2 mouse, glm::uvec2 window_size, glm::vec2 *world) const {
 		if (scale <= 0.0f) return false;
 		glm::vec2 point = (glm::vec2(mouse.x, float(window_size.y) - mouse.y) - offset) / scale;

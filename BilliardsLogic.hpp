@@ -16,6 +16,16 @@ struct BilliardsLogic {
 	float capture_radius = 11.0f;
 	std::array<Asteroid, 3> asteroids{};
 
+	static constexpr float max_drag = 120.0f;
+	static constexpr float min_drag = 4.0f;
+	static constexpr float shot_speed_per_unit = 4.0f;
+	unsigned shots = 0;
+
+	bool ready_to_shoot() const;
+	int asteroid_at(glm::vec2 position) const;
+	static glm::vec2 shot_velocity(glm::vec2 drag);
+	bool shoot(int index, glm::vec2 drag);
+
 	BilliardsLogic();
 	void reset();
 };
