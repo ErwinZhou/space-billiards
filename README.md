@@ -1,21 +1,19 @@
-# (TODO: your game's title)
+# Space Billiards
 
-Author: (TODO: your name)
+A top-down 2D space billiards game in development, using pixel-art asteroids and a black hole. The current executable previews the four game sprites; billiards gameplay is not implemented yet.
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+## Build and run
 
-Screen Shot:
+Install the NEST dependencies described in [NEST.md](NEST.md), then run:
 
-![Screen Shot](screenshot.png)
+```sh
+node Maekfile.js
+./dist/game
+```
 
-How To Play:
+On Windows, run `dist/game.exe`.
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+## Artwork
 
-## Extra Credit
-
-Are your Physics Deterministic? If so, how can we verify this?
-
-Are your Physics Rewindable? If so, how can we verify this?
-
-This game was built with [NEST](NEST.md).
+Edit the layered Aseprite files in `assets/` and export the matching PNGs. Run `node Maekfile.js :assets` to copy the runtime images and artwork credits into `dist/`. Restart the game to see updated images.
+This game uses [NEST](NEST.md) for its window, rendering, font, and PNG support.

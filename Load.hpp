@@ -5,20 +5,10 @@
  *
  * This is useful for global-scope resources that need an OpenGL context:
  *
- * //at global scope:
- * Load< Mesh > main_mesh([]() -> const Mesh * {
- *     return &Meshes.get("Main");
- * });
- *
- * //later:
- * void GameMode::draw() {
- *     glBindVertexArray(main_mesh->vao);
- * }
- *
  * Load<> is built on the add_load_function() call that adds a function to one of several lists of functions that are called after the OpenGL canvas is initialized.
  *
  * These functions are grouped by 'tags', which allow some sequencing of calls.
- * (particularly, this is useful for loading large data blobs [e.g. Meshes] before looking up individual elements within them.)
+ * Early tags initialize shader programs before resources that use them.
  *
  */
 
