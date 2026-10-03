@@ -1,7 +1,4 @@
 # Space Billiards
-
-A top-down 2D space billiards game in development, using pixel-art asteroids and a black hole. The current executable previews the four game sprites; billiards gameplay is not implemented yet.
-
 ## Build and run
 
 Install the NEST dependencies described in [NEST.md](NEST.md), then run:

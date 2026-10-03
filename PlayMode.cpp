@@ -1,4 +1,5 @@
 #include "PlayMode.hpp"
+#include "ArenaLayout.hpp"
 
 #include "ColorTextureProgram.hpp"
 #include "DrawLines.hpp"
@@ -64,7 +65,11 @@ PlayMode::~PlayMode() {
 	glDeleteVertexArrays(1, &sprite_vao);
 }
 
-bool PlayMode::handle_event(SDL_Event const &, glm::uvec2 const &) {
+bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &) {
+	if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_R && !event.key.repeat) {
+		game.reset();
+		return true;
+	}
 	return false;
 }
 
@@ -81,18 +86,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBlendEquation(GL_FUNC_ADD);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// Fit a 2x2 preview, enlarging by whole pixels whenever there is room.
-	int scale = std::max(1, std::min(int(drawable_size.x) / 192, int(drawable_size.y) / 224));
-	float side = 64.0f * scale;
-	float gap = 16.0f * scale;
-	float width = 2.0f * side + gap;
-	float left = std::floor((float(drawable_size.x) - width) * 0.5f);
-	float bottom = std::floor((float(drawable_size.y) - width) * 0.5f);
-	glm::mat4 projection(1.0f);
-	projection[0][0] = 2.0f / drawable_size.x;
-	projection[1][1] = 2.0f / drawable_size.y;
-	projection[3][0] = -1.0f;
-	projection[3][1] = -1.0f;
+	glm::mat4 projection = ArenaLayout::fit(drawable_size).projection(drawable_size);
 
 	auto const &shader = *color_texture_program;
 	glUseProgram(shader.program);
@@ -101,17 +95,22 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	// The shader multiplies by vertex color; use solid white for every sprite.
 	glVertexAttrib4f(shader.Color_vec4, 1.0f, 1.0f, 1.0f, 1.0f);
 	glActiveTexture(GL_TEXTURE0);
-	for (size_t i = 0; i < textures.size(); ++i) {
-		float x = left + float(i % 2) * (side + gap);
-		float y = bottom + float(1 - i / 2) * (side + gap);
+	auto draw_sprite = [&](GLuint texture, glm::vec2 center) {
+		constexpr float half = 32.0f;
+		float x = center.x - half, y = center.y - half;
+		float side = 2.0f * half;
 		float vertices[] = {
 			x, y, 0, 0, x + side, y, 1, 0, x + side, y + side, 1, 1,
 			x, y, 0, 0, x + side, y + side, 1, 1, x, y + side, 0, 1
 		};
 		glBindBuffer(GL_ARRAY_BUFFER, sprite_vbo);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
-		glBindTexture(GL_TEXTURE_2D, textures[i]);
+		glBindTexture(GL_TEXTURE_2D, texture);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+	};
+	draw_sprite(textures[3], game.black_hole_center);
+	for (size_t i = 0; i < game.asteroids.size(); ++i) {
+		if (game.asteroids[i].active) draw_sprite(textures[i], game.asteroids[i].position);
 	}
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindVertexArray(0);
@@ -120,9 +119,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	{
 		DrawLines lines(projection);
+		glm::u8vec4 border(118, 169, 198, 255);
+		glm::vec3 lo(game.arena_min, 0.0f), hi(game.arena_max, 0.0f);
+		glm::vec3 br(hi.x, lo.y, 0.0f), tl(lo.x, hi.y, 0.0f);
+		lines.draw(lo, br, border); lines.draw(br, hi, border);
+		lines.draw(hi, tl, border); lines.draw(tl, lo, border);
 		float h = 12.0f;
-		lines.draw_text("Space Billiards - asset preview", glm::vec3(16, drawable_size.y - 24.0f, 0),
+		lines.draw_text("Space Billiards", glm::vec3(32, 612, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
+		lines.draw_text("R: reset", glm::vec3(32, 20, 0),
+			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}
 	GL_ERRORS();
 }
