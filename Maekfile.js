@@ -117,8 +117,8 @@ if (maek.OS === 'windows') {
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
-	maek.CPP('LitColorTextureProgram.cpp')
-	//, maek.CPP('ColorTextureProgram.cpp')  //not used right now, but you might want it
+	maek.CPP('LitColorTextureProgram.cpp'),
+	maek.CPP('ColorTextureProgram.cpp')
 ];
 
 const common_names = [
@@ -155,6 +155,16 @@ const show_scene_names = [
 const game_exe = maek.LINK([...game_names, ...common_names], 'dist/game');
 const show_meshes_exe = maek.LINK([...show_mesh_names, ...common_names], 'scenes/show-meshes');
 const show_scene_exe = maek.LINK([...show_scene_names, ...common_names], 'scenes/show-scene');
+
+// Like game5: export the editable sources to PNG, then copy runtime assets.
+const sprite_assets = ['asteroid-a', 'asteroid-b', 'asteroid-c', 'black-hole']
+	.map(name => maek.COPY(`assets/${name}.png`, `dist/${name}.png`));
+sprite_assets.push(maek.COPY('assets/CREDITS.txt', 'dist/CREDITS.txt'));
+const assets_target = async () => {};
+assets_target.depends = sprite_assets;
+assets_target.label = 'ASSETS :assets';
+maek.tasks[':assets'] = assets_target;
+maek.tasks[game_exe].depends.push(...sprite_assets);
 
 //set the default target to the game (and copy the readme files):
 maek.TARGETS = [game_exe, show_meshes_exe, show_scene_exe, ...copies];
