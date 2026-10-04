@@ -107,7 +107,8 @@ bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_siz
 	return true;
 }
 
-void PlayMode::update(float) {
+void PlayMode::update(float elapsed) {
+	game.advance(elapsed);
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {

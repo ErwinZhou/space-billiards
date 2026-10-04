@@ -19,8 +19,11 @@ struct BilliardsLogic {
 	static constexpr float max_drag = 120.0f;
 	static constexpr float min_drag = 4.0f;
 	static constexpr float shot_speed_per_unit = 4.0f;
+	static constexpr float fixed_step = 1.0f / 60.0f;
 	unsigned shots = 0;
 
+	void advance(float elapsed);
+	void step();
 	bool ready_to_shoot() const;
 	int asteroid_at(glm::vec2 position) const;
 	static glm::vec2 shot_velocity(glm::vec2 drag);
@@ -28,4 +31,7 @@ struct BilliardsLogic {
 
 	BilliardsLogic();
 	void reset();
+
+private:
+	double accumulated_time = 0.0;
 };

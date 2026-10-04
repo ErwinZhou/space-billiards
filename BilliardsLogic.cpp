@@ -9,6 +9,7 @@ BilliardsLogic::BilliardsLogic() {
 
 void BilliardsLogic::reset() {
 	shots = 0;
+	accumulated_time = 0.0;
 	arena_min = {32.0f, 48.0f};
 	arena_max = {992.0f, 592.0f};
 	black_hole_center = {768.0f, 320.0f};
@@ -53,4 +54,70 @@ bool BilliardsLogic::shoot(int index, glm::vec2 drag) {
 	asteroids[index].velocity = velocity;
 	++shots;
 	return true;
+}
+
+void BilliardsLogic::advance(float elapsed) {
+	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	accumulated_time += std::min(elapsed, 0.25f);
+	while (accumulated_time >= double(fixed_step)) {
+		step();
+		accumulated_time -= double(fixed_step);
+	}
+}
+
+void BilliardsLogic::step() {
+	constexpr float restitution = 0.95f;
+	auto contain = [&](Asteroid &a) {
+		for (int axis = 0; axis < 2; ++axis) {
+			float low = arena_min[axis] + a.radius;
+			float high = arena_max[axis] - a.radius;
+			if (a.position[axis] < low) {
+				a.position[axis] = low;
+				if (a.velocity[axis] < 0) a.velocity[axis] *= -restitution;
+			} else if (a.position[axis] > high) {
+				a.position[axis] = high;
+				if (a.velocity[axis] > 0) a.velocity[axis] *= -restitution;
+			}
+		}
+	};
+	// small substeps reduce missed grazing contacts at maximum shot speed
+	for (int substep = 0; substep < 4; ++substep) {
+		for (auto &a : asteroids) {
+			if (!a.active) continue;
+			a.position += a.velocity * (fixed_step / 4.0f);
+			contain(a);
+		}
+		// repeated passes resolve contacts pushed into walls or other asteroids
+		for (int pass = 0; pass < 4; ++pass) {
+			for (size_t i = 0; i < asteroids.size(); ++i) {
+				auto &a = asteroids[i];
+				if (!a.active) continue;
+				for (size_t j = i + 1; j < asteroids.size(); ++j) {
+					auto &b = asteroids[j];
+					if (!b.active) continue;
+					glm::vec2 delta = b.position - a.position;
+					float distance = glm::length(delta);
+					float radius = a.radius + b.radius;
+					if (distance > radius) continue;
+					glm::vec2 normal = distance > 0.0001f ? delta / distance : glm::vec2(1.0f, 0.0f);
+					glm::vec2 correction = normal * (0.5f * (radius - distance));
+					a.position -= correction;
+					b.position += correction;
+					float closing = glm::dot(b.velocity - a.velocity, normal);
+					if (closing < 0.0f) {
+						glm::vec2 impulse = normal * (-0.5f * (1.0f + restitution) * closing);
+						a.velocity -= impulse;
+						b.velocity += impulse;
+					}
+				}
+			}
+			for (auto &a : asteroids) if (a.active) contain(a);
+		}
+	}
+	float damping = std::exp(-0.7f * fixed_step);
+	for (auto &a : asteroids) {
+		if (!a.active) continue;
+		a.velocity *= damping;
+		if (glm::length(a.velocity) < 3.0f) a.velocity = glm::vec2(0.0f);
+	}
 }
