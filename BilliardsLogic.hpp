@@ -24,6 +24,8 @@ struct BilliardsLogic {
 
 	void advance(float elapsed);
 	void step();
+	unsigned remaining() const;
+	bool won() const;
 	bool ready_to_shoot() const;
 	int asteroid_at(glm::vec2 position) const;
 	static glm::vec2 shot_velocity(glm::vec2 drag);

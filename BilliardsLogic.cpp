@@ -21,6 +21,16 @@ void BilliardsLogic::reset() {
 	}};
 }
 
+unsigned BilliardsLogic::remaining() const {
+	unsigned count = 0;
+	for (auto const &asteroid : asteroids) if (asteroid.active) ++count;
+	return count;
+}
+
+bool BilliardsLogic::won() const {
+	return remaining() == 0;
+}
+
 bool BilliardsLogic::ready_to_shoot() const {
 	bool remaining = false;
 	for (auto const &asteroid : asteroids) {
@@ -57,7 +67,7 @@ bool BilliardsLogic::shoot(int index, glm::vec2 drag) {
 }
 
 void BilliardsLogic::advance(float elapsed) {
-	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	if (won() || !std::isfinite(elapsed) || elapsed <= 0.0f) return;
 	accumulated_time += std::min(elapsed, 0.25f);
 	while (accumulated_time >= double(fixed_step)) {
 		step();
@@ -66,7 +76,18 @@ void BilliardsLogic::advance(float elapsed) {
 }
 
 void BilliardsLogic::step() {
+	if (won()) return;
 	constexpr float restitution = 0.95f;
+	auto capture = [&](Asteroid &a, glm::vec2 start) {
+		glm::vec2 segment = a.position - start;
+		float length_squared = glm::dot(segment, segment);
+		float t = length_squared > 0.0f ? std::clamp(glm::dot(black_hole_center - start, segment) / length_squared, 0.0f, 1.0f) : 0.0f;
+		glm::vec2 nearest = start + t * segment - black_hole_center;
+		if (glm::dot(nearest, nearest) <= capture_radius * capture_radius) {
+			a.active = false;
+			a.velocity = glm::vec2(0.0f);
+		}
+	};
 	auto contain = [&](Asteroid &a) {
 		for (int axis = 0; axis < 2; ++axis) {
 			float low = arena_min[axis] + a.radius;
@@ -84,8 +105,10 @@ void BilliardsLogic::step() {
 	for (int substep = 0; substep < 4; ++substep) {
 		for (auto &a : asteroids) {
 			if (!a.active) continue;
+			glm::vec2 start = a.position;
 			a.position += a.velocity * (fixed_step / 4.0f);
-			contain(a);
+			capture(a, start);
+			if (a.active) contain(a);
 		}
 		// repeated passes resolve contacts pushed into walls or other asteroids
 		for (int pass = 0; pass < 4; ++pass) {
@@ -111,7 +134,11 @@ void BilliardsLogic::step() {
 					}
 				}
 			}
-			for (auto &a : asteroids) if (a.active) contain(a);
+			for (auto &a : asteroids) {
+				if (!a.active) continue;
+				contain(a);
+				capture(a, a.position);
+			}
 		}
 	}
 	float damping = std::exp(-0.7f * fixed_step);
