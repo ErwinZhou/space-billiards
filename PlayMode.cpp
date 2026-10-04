@@ -107,6 +107,7 @@ bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_siz
 
 void PlayMode::update(float elapsed) {
 	game.advance(elapsed);
+	if (selected >= 0 && !game.asteroids[selected].active) selected = -1;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
@@ -178,9 +179,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			}
 		}
 		float h = 12.0f;
-		lines.draw_text("Space Billiards | Shots: " + std::to_string(game.shots), glm::vec3(32, 612, 0),
+		lines.draw_text("Space Billiards | Remaining: " + std::to_string(game.remaining()) + " | Shots: " + std::to_string(game.shots), glm::vec3(32, 612, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
-		lines.draw_text("Drag back and release to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
+		lines.draw_text(game.won() ? "All cleared | R: restart" : "Drag back and release to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}
 	GL_ERRORS();
