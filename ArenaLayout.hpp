@@ -25,10 +25,10 @@ struct ArenaLayout {
 		return result;
 	}
 	// logical window dimensions for mouse input and drawable dimensions for rendering
-	bool mouse_to_world(glm::vec2 mouse, glm::uvec2 window_size, glm::vec2 *world) const {
+	bool mouse_to_world(glm::vec2 mouse, glm::uvec2 window_size, glm::vec2 *world, bool allow_outside = false) const {
 		if (scale <= 0.0f) return false;
 		glm::vec2 point = (glm::vec2(mouse.x, float(window_size.y) - mouse.y) - offset) / scale;
-		if (point.x < 0 || point.x > 1024 || point.y < 0 || point.y > 640) return false;
+		if (!allow_outside && (point.x < 0 || point.x > 1024 || point.y < 0 || point.y > 640)) return false;
 		*world = point;
 		return true;
 	}

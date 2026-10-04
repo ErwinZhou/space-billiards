@@ -88,9 +88,7 @@ bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_siz
 	if (!down && selected < 0) return false;
 	glm::vec2 mouse = motion ? glm::vec2(event.motion.x, event.motion.y) : glm::vec2(event.button.x, event.button.y);
 	glm::vec2 world;
-	if (!ArenaLayout::fit(window_size).mouse_to_world(mouse, window_size, &world) ||
-		world.x < game.arena_min.x || world.x > game.arena_max.x ||
-		world.y < game.arena_min.y || world.y > game.arena_max.y) {
+	if (!ArenaLayout::fit(window_size).mouse_to_world(mouse, window_size, &world, !down)) {
 		selected = -1;
 		return true;
 	}
