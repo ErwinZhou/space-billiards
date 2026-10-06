@@ -44,11 +44,18 @@ bool BilliardsLogic::won() const {
 }
 
 bool BilliardsLogic::lost() const {
-	return !asteroids[0].active;
+	if (!asteroids[0].active) return true;
+	if (shots < shot_limit || remaining() == 0) return false;
+	for (auto const &a : asteroids) {
+		if (!a.active) continue;
+		if (a.velocity != glm::vec2(0)) return false;
+		if (glm::distance(a.position, black_hole_center) < capture_radius + a.radius + 16.0f) return false;
+	}
+	return true;
 }
 
 bool BilliardsLogic::ready_to_shoot() const {
-	if (lost() || remaining() == 0) return false;
+	if (lost() || shots >= shot_limit || remaining() == 0) return false;
 	bool remaining = false;
 	for (auto const &asteroid : asteroids) {
 		if (!asteroid.active) continue;

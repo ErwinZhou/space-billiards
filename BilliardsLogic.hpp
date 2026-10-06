@@ -23,6 +23,7 @@ struct BilliardsLogic {
 	static constexpr float min_drag = 4.0f;
 	static constexpr float shot_speed_per_unit = 4.0f;
 	static constexpr float fixed_step = 1.0f / 60.0f;
+	static constexpr unsigned shot_limit = 25;
 	unsigned shots = 0;
 	unsigned score = 0;
 
