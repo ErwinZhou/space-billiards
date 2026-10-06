@@ -64,8 +64,8 @@ int main(int argc, char **argv) {
 
 	//create window:
 	Mode::window = SDL_CreateWindow(
-		"gp26 game6: physics", //TODO: remember to set a title for your game!
-		1280, 720, //TODO: modify window size if you'd like
+		"Space Billiards",
+		1280, 720,
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing
 		| SDL_WINDOW_HIGH_PIXEL_DENSITY //uncomment for full resolution on high-DPI screens
@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
 					Mode::set_current(nullptr);
 					break;
 				} else if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_PRINTSCREEN) {
-					// --- screenshot key ---
-					std::string filename = "screenshot.png";
+					// save screenshot
+					std::string filename = "screenshots/screenshot.png";
 					std::cout << "Saving screenshot to '" << filename << "'." << std::endl;
 					glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 					glReadBuffer(GL_FRONT);

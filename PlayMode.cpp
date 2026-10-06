@@ -1,214 +1,195 @@
 #include "PlayMode.hpp"
+#include "ArenaLayout.hpp"
 
-#include "LitColorTextureProgram.hpp"
-
+#include "ColorTextureProgram.hpp"
 #include "DrawLines.hpp"
-#include "Mesh.hpp"
-#include "Load.hpp"
-#include "gl_errors.hpp"
 #include "data_path.hpp"
+#include "load_save_png.hpp"
+#include "gl_errors.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include <random>
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
-	return ret;
-});
+namespace {
+constexpr std::array<char const *, 4> asset_names = {
+	"asteroid-a", "asteroid-b", "asteroid-c", "black-hole"
+};
+}
 
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
-
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-
-		drawable.pipeline = lit_color_texture_program_pipeline;
-
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-
-	});
-});
-
-PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
+PlayMode::PlayMode() {
+	// read pngs before allocating gl resources
+	std::array<std::vector<glm::u8vec4>, 4> pixels;
+	for (size_t i = 0; i < asset_names.size(); ++i) {
+		glm::uvec2 size;
+		load_png(data_path(std::string(asset_names[i]) + ".png"), &size, &pixels[i], LowerLeftOrigin);
+		if (size != glm::uvec2(64, 64)) {
+			throw std::runtime_error(std::string(asset_names[i]) + ": expected a 64x64 PNG");
+		}
 	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+	glActiveTexture(GL_TEXTURE0);
+	glGenTextures(GLsizei(textures.size()), textures.data());
+	for (size_t i = 0; i < textures.size(); ++i) {
+		if (i == 0) {
+			for (auto &pixel : pixels[i]) {
+				uint8_t gray = uint8_t((unsigned(pixel.r) * 54 + unsigned(pixel.g) * 183 + unsigned(pixel.b) * 19) / 256);
+				pixel.r = pixel.g = pixel.b = gray;
+			}
+		}
+		glBindTexture(GL_TEXTURE_2D, textures[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0,
+			GL_RGBA, GL_UNSIGNED_BYTE, pixels[i].data());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	glBindTexture(GL_TEXTURE_2D, 0);
 
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
-
-	//get pointer to camera for convenience:
-	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
-	camera = &scene.cameras.front();
+	glGenVertexArrays(1, &sprite_vao);
+	glGenBuffers(1, &sprite_vbo);
+	glBindVertexArray(sprite_vao);
+	glBindBuffer(GL_ARRAY_BUFFER, sprite_vbo);
+	auto const &shader = *color_texture_program;
+	glVertexAttribPointer(shader.Position_vec4, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+	glEnableVertexAttribArray(shader.Position_vec4);
+	glVertexAttribPointer(shader.TexCoord_vec2, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+		reinterpret_cast<void *>(2 * sizeof(float)));
+	glEnableVertexAttribArray(shader.TexCoord_vec2);
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	GL_ERRORS();
 }
 
 PlayMode::~PlayMode() {
+	glDeleteTextures(GLsizei(textures.size()), textures.data());
+	glDeleteBuffers(1, &sprite_vbo);
+	glDeleteVertexArrays(1, &sprite_vao);
 }
 
-bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-
-	if (evt.type == SDL_EVENT_KEY_DOWN) {
-		if (evt.key.key == SDLK_ESCAPE) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, false);
-			return true;
-		} else if (evt.key.key == SDLK_A) {
-			left.downs += 1;
-			left.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.downs += 1;
-			right.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.downs += 1;
-			up.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.downs += 1;
-			down.pressed = true;
+bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_size) {
+	if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+		if (event.key.key == SDLK_R) {
+			selected = -1;
+			game.reset();
 			return true;
 		}
-	} else if (evt.type == SDL_EVENT_KEY_UP) {
-		if (evt.key.key == SDLK_A) {
-			left.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.pressed = false;
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == false) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, true);
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == true) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
+		if (event.key.key == SDLK_ESCAPE) {
+			selected = -1;
 			return true;
 		}
 	}
-
-	return false;
+	if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST || event.type == SDL_EVENT_WINDOW_RESIZED) {
+		selected = -1;
+		return false;
+	}
+	bool down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT;
+	bool up = event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT;
+	bool motion = event.type == SDL_EVENT_MOUSE_MOTION;
+	if (!down && !up && !motion) return false;
+	if (!down && selected < 0) return false;
+	glm::vec2 mouse = motion ? glm::vec2(event.motion.x, event.motion.y) : glm::vec2(event.button.x, event.button.y);
+	glm::vec2 world;
+	if (!ArenaLayout::fit(window_size).mouse_to_world(mouse, window_size, &world, !down)) {
+		selected = -1;
+		return true;
+	}
+	if (down) {
+		selected = game.ready_to_shoot() ? game.asteroid_at(world) : -1;
+		drag_start = drag_cursor = world;
+	} else if (up) {
+		int index = selected;
+		selected = -1;
+		game.shoot(index, world - drag_start);
+	} else {
+		drag_cursor = world;
+	}
+	return true;
 }
 
 void PlayMode::update(float elapsed) {
-
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
-	//move camera:
-	{
-
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
-
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_parent_from_local();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
-	}
-
-	//reset button press counters:
-	left.downs = 0;
-	right.downs = 0;
-	up.downs = 0;
-	down.downs = 0;
+	game.advance(elapsed);
+	if (selected >= 0 && (game.lost() || game.won() || !game.asteroids[selected].active)) selected = -1;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	//update camera aspect ratio for drawable:
-	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	if (drawable_size.x == 0 || drawable_size.y == 0) return;
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_SCISSOR_TEST);
+	glClearColor(0.039f, 0.047f, 0.094f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
+	glm::mat4 projection = ArenaLayout::fit(drawable_size).projection(drawable_size);
+
+	auto const &shader = *color_texture_program;
+	glUseProgram(shader.program);
+	glUniformMatrix4fv(shader.OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(projection));
+	glBindVertexArray(sprite_vao);
+	// white vertex color preserves sprite colors
+	glVertexAttrib4f(shader.Color_vec4, 1.0f, 1.0f, 1.0f, 1.0f);
+	glActiveTexture(GL_TEXTURE0);
+	auto draw_sprite = [&](GLuint texture, glm::vec2 center, float half = 32.0f) {
+		float x = center.x - half, y = center.y - half;
+		float side = 2.0f * half;
+		float vertices[] = {
+			x, y, 0, 0, x + side, y, 1, 0, x + side, y + side, 1, 1,
+			x, y, 0, 0, x + side, y + side, 1, 1, x, y + side, 0, 1
+		};
+		glBindBuffer(GL_ARRAY_BUFFER, sprite_vbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+	};
+	draw_sprite(textures[3], game.black_hole_center, 96.0f);
+	for (size_t i = 0; i < game.asteroids.size(); ++i) {
+		if (game.asteroids[i].active) draw_sprite(textures[i == 0 ? 0 : 1 + (i % 2)], game.asteroids[i].position);
+	}
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glUseProgram(0);
 
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
-
-	GL_ERRORS(); //print any errors produced by this setup code
-
-	scene.draw(*camera);
-
-	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+	{
+		DrawLines lines(projection);
+		glm::u8vec4 border(118, 169, 198, 255);
+		glm::vec3 lo(game.arena_min, 0.0f), hi(game.arena_max, 0.0f);
+		glm::vec3 br(hi.x, lo.y, 0.0f), tl(lo.x, hi.y, 0.0f);
+		lines.draw(lo, br, border); lines.draw(br, hi, border);
+		lines.draw(hi, tl, border); lines.draw(tl, lo, border);
+		if (selected >= 0) {
+			auto const &asteroid = game.asteroids[selected];
+			glm::u8vec4 gold(255, 195, 94, 255);
+			for (int i = 0; i < 32; ++i) {
+				float a = float(i) * 6.2831853f / 32.0f;
+				float b = float(i + 1) * 6.2831853f / 32.0f;
+				float radius = asteroid.radius + 4.0f;
+				lines.draw(glm::vec3(asteroid.position + radius * glm::vec2(std::cos(a), std::sin(a)), 0),
+					glm::vec3(asteroid.position + radius * glm::vec2(std::cos(b), std::sin(b)), 0), gold);
+			}
+			glm::vec2 aim = BilliardsLogic::shot_velocity(drag_cursor - drag_start) / BilliardsLogic::shot_speed_per_unit;
+			if (aim != glm::vec2(0.0f)) {
+				glm::vec2 tip = asteroid.position + aim;
+				glm::vec2 direction = glm::normalize(aim);
+				glm::vec2 normal(-direction.y, direction.x);
+				lines.draw(glm::vec3(asteroid.position, 0), glm::vec3(tip, 0), gold);
+				lines.draw(glm::vec3(tip, 0), glm::vec3(tip - direction * 8.0f + normal * 4.0f, 0), gold);
+				lines.draw(glm::vec3(tip, 0), glm::vec3(tip - direction * 8.0f - normal * 4.0f, 0), gold);
+			}
+		}
+		float h = 12.0f;
+		lines.draw_text("Space Billiards | Remaining: " + std::to_string(game.remaining()) + " | Shots: " + std::to_string(game.shots) + "/" + std::to_string(BilliardsLogic::shot_limit), glm::vec3(32, 612, 0),
+			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
+		lines.draw_text("Points: " + std::to_string(game.score), glm::vec3(860, 612, 0),
+			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
+		lines.draw_text(game.lost() ? (game.asteroids[0].active ? "Out of shots | R: restart" : "Cue asteroid lost | R: restart") : game.won() ? "All cleared | R: restart" : "Drag the gray asteroid to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
+			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}
+	GL_ERRORS();
 }
