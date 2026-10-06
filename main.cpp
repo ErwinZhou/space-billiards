@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
 					Mode::set_current(nullptr);
 					break;
 				} else if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_PRINTSCREEN) {
-					// --- screenshot key ---
-					std::string filename = "screenshot.png";
+					// save screenshot
+					std::string filename = "screenshots/screenshot.png";
 					std::cout << "Saving screenshot to '" << filename << "'." << std::endl;
 					glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 					glReadBuffer(GL_FRONT);
