@@ -186,6 +186,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		float h = 12.0f;
 		lines.draw_text("Space Billiards | Remaining: " + std::to_string(game.remaining()) + " | Shots: " + std::to_string(game.shots), glm::vec3(32, 612, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
+		lines.draw_text("Points: " + std::to_string(game.score), glm::vec3(860, 612, 0),
+			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
 		lines.draw_text(game.lost() ? "Cue asteroid lost | R: restart" : game.won() ? "All cleared | R: restart" : "Drag the gray asteroid to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}

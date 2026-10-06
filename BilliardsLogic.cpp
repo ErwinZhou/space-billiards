@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 
 BilliardsLogic::BilliardsLogic() {
 	reset();
@@ -9,12 +10,17 @@ BilliardsLogic::BilliardsLogic() {
 
 void BilliardsLogic::reset() {
 	shots = 0;
+	score = 0;
 	accumulated_time = 0.0;
 	arena_min = {32.0f, 48.0f};
 	arena_max = {992.0f, 592.0f};
 	black_hole_center = {848.0f, 320.0f};
 	capture_radius = 33.0f;
 	asteroids.fill(Asteroid{});
+	std::mt19937 random(std::random_device{}());
+	std::uniform_real_distribution<float> mass(0.35f, 0.65f);
+	for (size_t i = 1; i < asteroids.size(); ++i) asteroids[i].mass = mass(random);
+	asteroids[0].points = 0;
 	asteroids[0].position = {224.0f, 320.0f};
 	size_t index = 1;
 	for (int row = 0; row < 5; ++row) {
@@ -32,6 +38,7 @@ unsigned BilliardsLogic::remaining() const {
 
 bool BilliardsLogic::won() const {
 	if (lost() || remaining() != 0) return false;
+	if (glm::distance(asteroids[0].position, black_hole_center) < capture_radius + asteroids[0].radius + 16.0f) return false;
 	for (auto const &a : asteroids) if (a.active && a.velocity != glm::vec2(0)) return false;
 	return true;
 }
@@ -91,7 +98,9 @@ void BilliardsLogic::step() {
 		float length_squared = glm::dot(segment, segment);
 		float t = length_squared > 0.0f ? std::clamp(glm::dot(black_hole_center - start, segment) / length_squared, 0.0f, 1.0f) : 0.0f;
 		glm::vec2 nearest = start + t * segment - black_hole_center;
-		if (glm::dot(nearest, nearest) <= capture_radius * capture_radius) {
+		float radius = capture_radius + a.radius;
+		if (glm::dot(nearest, nearest) <= radius * radius) {
+			score += a.points;
 			a.active = false;
 			a.velocity = glm::vec2(0.0f);
 		}
@@ -113,6 +122,11 @@ void BilliardsLogic::step() {
 	for (int substep = 0; substep < 4; ++substep) {
 		for (auto &a : asteroids) {
 			if (!a.active) continue;
+			glm::vec2 toward_hole = black_hole_center - a.position;
+			float distance = glm::length(toward_hole);
+			if (distance > 0.0f && distance < capture_radius + a.radius + 16.0f) {
+				a.velocity += toward_hole / distance * (80.0f * fixed_step / 4.0f);
+			}
 			glm::vec2 start = a.position;
 			a.position += a.velocity * (fixed_step / 4.0f);
 			capture(a, start);
@@ -132,14 +146,16 @@ void BilliardsLogic::step() {
 					float radius = a.radius + b.radius;
 					if (distance > radius) continue;
 					glm::vec2 normal = distance > 0.0001f ? delta / distance : glm::vec2(1.0f, 0.0f);
-					glm::vec2 correction = normal * (0.5f * (radius - distance));
-					a.position -= correction;
-					b.position += correction;
+					float inverse_a = 1.0f / a.mass, inverse_b = 1.0f / b.mass;
+					float inverse_sum = inverse_a + inverse_b;
+					glm::vec2 correction = normal * ((radius - distance) / inverse_sum);
+					a.position -= correction * inverse_a;
+					b.position += correction * inverse_b;
 					float closing = glm::dot(b.velocity - a.velocity, normal);
 					if (closing < 0.0f) {
-						glm::vec2 impulse = normal * (-0.5f * (1.0f + restitution) * closing);
-						a.velocity -= impulse;
-						b.velocity += impulse;
+						glm::vec2 impulse = normal * (-(1.0f + restitution) * closing / inverse_sum);
+						a.velocity -= impulse * inverse_a;
+						b.velocity += impulse * inverse_b;
 					}
 				}
 			}
@@ -155,6 +171,6 @@ void BilliardsLogic::step() {
 	for (auto &a : asteroids) {
 		if (!a.active) continue;
 		a.velocity *= damping;
-		if (glm::length(a.velocity) < 3.0f) a.velocity = glm::vec2(0.0f);
+		if (glm::length(a.velocity) < 3.0f && glm::distance(a.position, black_hole_center) >= capture_radius + a.radius + 16.0f) a.velocity = glm::vec2(0.0f);
 	}
 }

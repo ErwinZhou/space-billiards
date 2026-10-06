@@ -9,6 +9,8 @@ struct BilliardsLogic {
 		glm::vec2 velocity{0.0f};
 		float radius = 25.0f;
 		bool active = true;
+		float mass = 1.0f;
+		unsigned points = 10;
 	};
 	glm::vec2 arena_min{32.0f, 48.0f};
 	glm::vec2 arena_max{992.0f, 592.0f};
@@ -22,6 +24,7 @@ struct BilliardsLogic {
 	static constexpr float shot_speed_per_unit = 4.0f;
 	static constexpr float fixed_step = 1.0f / 60.0f;
 	unsigned shots = 0;
+	unsigned score = 0;
 
 	void advance(float elapsed);
 	void step();
