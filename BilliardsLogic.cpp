@@ -12,26 +12,36 @@ void BilliardsLogic::reset() {
 	accumulated_time = 0.0;
 	arena_min = {32.0f, 48.0f};
 	arena_max = {992.0f, 592.0f};
-	black_hole_center = {768.0f, 320.0f};
-	capture_radius = 11.0f;
-	asteroids = {{
-		{{256.0f, 320.0f}, {0.0f, 0.0f}, 25.0f, true},
-		{{448.0f, 416.0f}, {0.0f, 0.0f}, 25.0f, true},
-		{{448.0f, 224.0f}, {0.0f, 0.0f}, 25.0f, true}
-	}};
+	black_hole_center = {848.0f, 320.0f};
+	capture_radius = 33.0f;
+	asteroids.fill(Asteroid{});
+	asteroids[0].position = {224.0f, 320.0f};
+	size_t index = 1;
+	for (int row = 0; row < 5; ++row) {
+		for (int column = 0; column <= row; ++column) {
+			asteroids[index++].position = {460.0f + row * 44.0f, 320.0f + (column - row * 0.5f) * 52.0f};
+		}
+	}
 }
 
 unsigned BilliardsLogic::remaining() const {
 	unsigned count = 0;
-	for (auto const &asteroid : asteroids) if (asteroid.active) ++count;
+	for (size_t i = 1; i < asteroids.size(); ++i) if (asteroids[i].active) ++count;
 	return count;
 }
 
 bool BilliardsLogic::won() const {
-	return remaining() == 0;
+	if (lost() || remaining() != 0) return false;
+	for (auto const &a : asteroids) if (a.active && a.velocity != glm::vec2(0)) return false;
+	return true;
+}
+
+bool BilliardsLogic::lost() const {
+	return !asteroids[0].active;
 }
 
 bool BilliardsLogic::ready_to_shoot() const {
+	if (lost() || remaining() == 0) return false;
 	bool remaining = false;
 	for (auto const &asteroid : asteroids) {
 		if (!asteroid.active) continue;
@@ -44,10 +54,8 @@ bool BilliardsLogic::ready_to_shoot() const {
 int BilliardsLogic::asteroid_at(glm::vec2 position) const {
 	if (position.x < arena_min.x || position.x > arena_max.x ||
 		position.y < arena_min.y || position.y > arena_max.y) return -1;
-	for (size_t i = 0; i < asteroids.size(); ++i) {
-		auto const &asteroid = asteroids[i];
-		if (asteroid.active && glm::distance(position, asteroid.position) <= asteroid.radius) return int(i);
-	}
+	auto const &cue = asteroids[0];
+	if (cue.active && glm::distance(position, cue.position) <= cue.radius) return 0;
 	return -1;
 }
 
@@ -58,7 +66,7 @@ glm::vec2 BilliardsLogic::shot_velocity(glm::vec2 drag) {
 }
 
 bool BilliardsLogic::shoot(int index, glm::vec2 drag) {
-	if (index < 0 || size_t(index) >= asteroids.size() || !asteroids[index].active || !ready_to_shoot()) return false;
+	if (index != 0 || size_t(index) >= asteroids.size() || !asteroids[index].active || !ready_to_shoot()) return false;
 	glm::vec2 velocity = shot_velocity(drag);
 	if (velocity == glm::vec2(0.0f)) return false;
 	asteroids[index].velocity = velocity;
@@ -67,7 +75,7 @@ bool BilliardsLogic::shoot(int index, glm::vec2 drag) {
 }
 
 void BilliardsLogic::advance(float elapsed) {
-	if (won() || !std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	if (lost() || won() || !std::isfinite(elapsed) || elapsed <= 0.0f) return;
 	accumulated_time += std::min(elapsed, 0.25f);
 	while (accumulated_time >= double(fixed_step)) {
 		step();
@@ -76,7 +84,7 @@ void BilliardsLogic::advance(float elapsed) {
 }
 
 void BilliardsLogic::step() {
-	if (won()) return;
+	if (lost() || won()) return;
 	constexpr float restitution = 0.95f;
 	auto capture = [&](Asteroid &a, glm::vec2 start) {
 		glm::vec2 segment = a.position - start;
@@ -110,6 +118,7 @@ void BilliardsLogic::step() {
 			capture(a, start);
 			if (a.active) contain(a);
 		}
+		if (lost()) return;
 		// repeated passes resolve contacts pushed into walls or other asteroids
 		for (int pass = 0; pass < 4; ++pass) {
 			for (size_t i = 0; i < asteroids.size(); ++i) {
@@ -140,6 +149,7 @@ void BilliardsLogic::step() {
 				capture(a, a.position);
 			}
 		}
+		if (lost()) return;
 	}
 	float damping = std::exp(-0.7f * fixed_step);
 	for (auto &a : asteroids) {

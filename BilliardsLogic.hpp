@@ -12,9 +12,10 @@ struct BilliardsLogic {
 	};
 	glm::vec2 arena_min{32.0f, 48.0f};
 	glm::vec2 arena_max{992.0f, 592.0f};
-	glm::vec2 black_hole_center{768.0f, 320.0f};
-	float capture_radius = 11.0f;
-	std::array<Asteroid, 3> asteroids{};
+	glm::vec2 black_hole_center{848.0f, 320.0f};
+	float capture_radius = 33.0f;
+	static constexpr size_t target_count = 15;
+	std::array<Asteroid, target_count + 1> asteroids{};
 
 	static constexpr float max_drag = 120.0f;
 	static constexpr float min_drag = 4.0f;
@@ -26,6 +27,7 @@ struct BilliardsLogic {
 	void step();
 	unsigned remaining() const;
 	bool won() const;
+	bool lost() const;
 	bool ready_to_shoot() const;
 	int asteroid_at(glm::vec2 position) const;
 	static glm::vec2 shot_velocity(glm::vec2 drag);

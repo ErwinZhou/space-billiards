@@ -34,6 +34,12 @@ PlayMode::PlayMode() {
 	glActiveTexture(GL_TEXTURE0);
 	glGenTextures(GLsizei(textures.size()), textures.data());
 	for (size_t i = 0; i < textures.size(); ++i) {
+		if (i == 0) {
+			for (auto &pixel : pixels[i]) {
+				uint8_t gray = uint8_t((unsigned(pixel.r) * 54 + unsigned(pixel.g) * 183 + unsigned(pixel.b) * 19) / 256);
+				pixel.r = pixel.g = pixel.b = gray;
+			}
+		}
 		glBindTexture(GL_TEXTURE_2D, textures[i]);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0,
 			GL_RGBA, GL_UNSIGNED_BYTE, pixels[i].data());
@@ -107,7 +113,7 @@ bool PlayMode::handle_event(SDL_Event const &event, glm::uvec2 const &window_siz
 
 void PlayMode::update(float elapsed) {
 	game.advance(elapsed);
-	if (selected >= 0 && !game.asteroids[selected].active) selected = -1;
+	if (selected >= 0 && (game.lost() || game.won() || !game.asteroids[selected].active)) selected = -1;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
@@ -129,8 +135,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	// white vertex color preserves sprite colors
 	glVertexAttrib4f(shader.Color_vec4, 1.0f, 1.0f, 1.0f, 1.0f);
 	glActiveTexture(GL_TEXTURE0);
-	auto draw_sprite = [&](GLuint texture, glm::vec2 center) {
-		constexpr float half = 32.0f;
+	auto draw_sprite = [&](GLuint texture, glm::vec2 center, float half = 32.0f) {
 		float x = center.x - half, y = center.y - half;
 		float side = 2.0f * half;
 		float vertices[] = {
@@ -142,9 +147,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 	};
-	draw_sprite(textures[3], game.black_hole_center);
+	draw_sprite(textures[3], game.black_hole_center, 96.0f);
 	for (size_t i = 0; i < game.asteroids.size(); ++i) {
-		if (game.asteroids[i].active) draw_sprite(textures[i], game.asteroids[i].position);
+		if (game.asteroids[i].active) draw_sprite(textures[i == 0 ? 0 : 1 + (i % 2)], game.asteroids[i].position);
 	}
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindVertexArray(0);
@@ -181,7 +186,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		float h = 12.0f;
 		lines.draw_text("Space Billiards | Remaining: " + std::to_string(game.remaining()) + " | Shots: " + std::to_string(game.shots), glm::vec3(32, 612, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(255, 195, 94, 255));
-		lines.draw_text(game.won() ? "All cleared | R: restart" : "Drag back and release to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
+		lines.draw_text(game.lost() ? "Cue asteroid lost | R: restart" : game.won() ? "All cleared | R: restart" : "Drag the gray asteroid to shoot | Esc: cancel | R: reset", glm::vec3(32, 20, 0),
 			glm::vec3(h, 0, 0), glm::vec3(0, h, 0), glm::u8vec4(200, 210, 220, 255));
 	}
 	GL_ERRORS();
